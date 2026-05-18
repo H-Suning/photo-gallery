@@ -33,7 +33,11 @@ app.use((req, res, next) => { ensureCloudinary(); next(); });
 // In production (Cloudflare Workers), static files are served at the edge by wrangler assets.
 // On local Node.js, serve from the public/ directory.
 if (!runningOnCFWorker) {
-  app.use(express.static('public'));
+  app.use(express.static('public', { extensions: ['html'] }));
+} else {
+  // On Workers, express.static might not be available; register explicit routes
+  app.get('/upload', (req, res) => res.redirect('/upload.html'));
+  app.get('/manage', (req, res) => res.redirect('/manage.html'));
 }
 
 // --- Helper: Cloudinary resource → photo object ---
