@@ -6,22 +6,30 @@ const https = require('https');
 const archiver = require('archiver');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 const TAG_FEATURED = 'gallery-featured';
 const FOLDER = 'photo-gallery';
+const runningOnCFWorker = typeof process !== 'undefined' && process.env && process.env.CF_WORKER;
 
-// Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+// Lazy Cloudinary init — avoids Railway build-time secret resolution
+let cloudinaryReady = false;
+function ensureCloudinary() {
+  if (!cloudinaryReady) {
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+    });
+    cloudinaryReady = true;
+  }
+}
 
 app.use(express.json({ limit: '50mb' }));
+app.use((req, res, next) => { ensureCloudinary(); next(); });
 
 // In production (Cloudflare Workers), static files are served at the edge by wrangler assets.
 // On local Node.js, serve from the public/ directory.
-if (!process.env.CF_WORKER) {
+if (!runningOnCFWorker) {
   app.use(express.static('public'));
 }
 
@@ -206,7 +214,7 @@ app.get('/api/shares/:token', async (req, res) => {
 
 // Share page — redirect with token as query param so it works on both Node.js (sendFile) and CF Workers (static assets)
 app.get('/share/:token', (req, res) => {
-  if (process.env.CF_WORKER) {
+  if (runningOnCFWorker) {
     // On Cloudflare Workers, redirect to share.html with token in query string
     // share.js will read it from the URL
     res.redirect('/share.html?token=' + encodeURIComponent(req.params.token));
@@ -216,7 +224,7 @@ app.get('/share/:token', (req, res) => {
 });
 
 // ===================== Start =====================
-if (!process.env.CF_WORKER) {
+if (!runningOnCFWorker) {
   app.listen(PORT, () => {
     console.log(`Photo Gallery running at http://localhost:${PORT}`);
   });
