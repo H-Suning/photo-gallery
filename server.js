@@ -1,8 +1,6 @@
 require('dotenv').config();
 const express = require('express');
 const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
-const multer = require('multer');
 const path = require('path');
 const https = require('https');
 const archiver = require('archiver');
@@ -19,21 +17,13 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Multer storage — uploads to Cloudinary with default featured tag
-const storage = new CloudinaryStorage({
-  cloudinary,
-  params: async () => ({
-    folder: FOLDER,
-    resource_type: 'image',
-    allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'avif'],
-    tags: [TAG_FEATURED],
-    transformation: [{ quality: 'auto', fetch_format: 'auto' }],
-  }),
-});
-const upload = multer({ storage });
+app.use(express.json({ limit: '50mb' }));
 
-app.use(express.json());
-app.use(express.static('public'));
+// In production (Cloudflare Workers), static files are served at the edge by wrangler assets.
+// On local Node.js, serve from the public/ directory.
+if (!process.env.CF_WORKER) {
+  app.use(express.static('public'));
+}
 
 // --- Helper: Cloudinary resource → photo object ---
 function toPhoto(r) {
@@ -93,38 +83,40 @@ app.get('/api/photos', async (req, res) => {
   }
 });
 
-// Upload single
-app.post('/api/upload', upload.single('image'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file' });
-  // Tag as featured (multer-storage-cloudinary may not handle tags in older versions)
+// Upload single (accepts data from direct browser-to-Cloudinary upload)
+app.post('/api/upload', async (req, res) => {
+  const { public_id, secure_url, format, bytes, width, height } = req.body;
+  if (!public_id || !secure_url) return res.status(400).json({ error: 'Missing public_id or secure_url' });
   try {
-    await cloudinary.uploader.add_tag(TAG_FEATURED, [req.file.public_id]);
-  } catch {}
-  const photo = toPhoto({
-    public_id: req.file.public_id,
-    secure_url: req.file.secure_url || req.file.path,
-    format: req.file.format,
-    bytes: req.file.bytes,
-    width: req.file.width,
-    height: req.file.height,
+    await cloudinary.uploader.add_tag(TAG_FEATURED, [public_id]);
+  } catch (e) {
+    console.warn('Tag failed:', e.message);
+  }
+  res.json(toPhoto({
+    public_id,
+    secure_url,
+    format: format || 'jpg',
+    bytes: bytes || 0,
+    width: width || 0,
+    height: height || 0,
     created_at: new Date().toISOString(),
     tags: [TAG_FEATURED],
-  });
-  res.json(photo);
+  }));
 });
 
-// Upload multiple
-app.post('/api/upload-multiple', upload.array('images', 50), async (req, res) => {
-  if (!req.files || !req.files.length) return res.status(400).json({ error: 'No files' });
-  const ids = req.files.map(f => f.public_id);
-  try { await cloudinary.api.add_tag(TAG_FEATURED, ids); } catch {}
-  const photos = req.files.map(f => toPhoto({
+// Upload multiple (accepts array of Cloudinary resource data)
+app.post('/api/upload-multiple', async (req, res) => {
+  const files = req.body.files || req.body;
+  if (!Array.isArray(files) || !files.length) return res.status(400).json({ error: 'No files' });
+  const ids = files.map(f => f.public_id);
+  try { await cloudinary.api.add_tag(TAG_FEATURED, ids); } catch (e) { console.warn('Tag failed:', e.message); }
+  const photos = files.map(f => toPhoto({
     public_id: f.public_id,
-    secure_url: f.secure_url || f.path,
-    format: f.format,
-    bytes: f.bytes,
-    width: f.width,
-    height: f.height,
+    secure_url: f.secure_url,
+    format: f.format || 'jpg',
+    bytes: f.bytes || 0,
+    width: f.width || 0,
+    height: f.height || 0,
     created_at: new Date().toISOString(),
     tags: [TAG_FEATURED],
   }));
@@ -212,12 +204,22 @@ app.get('/api/shares/:token', async (req, res) => {
   }
 });
 
-// Share page
+// Share page — redirect with token as query param so it works on both Node.js (sendFile) and CF Workers (static assets)
 app.get('/share/:token', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'share.html'));
+  if (process.env.CF_WORKER) {
+    // On Cloudflare Workers, redirect to share.html with token in query string
+    // share.js will read it from the URL
+    res.redirect('/share.html?token=' + encodeURIComponent(req.params.token));
+  } else {
+    res.sendFile(path.join(__dirname, 'public', 'share.html'));
+  }
 });
 
 // ===================== Start =====================
-app.listen(PORT, () => {
-  console.log(`Photo Gallery running at http://localhost:${PORT}`);
-});
+if (!process.env.CF_WORKER) {
+  app.listen(PORT, () => {
+    console.log(`Photo Gallery running at http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;

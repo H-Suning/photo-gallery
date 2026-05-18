@@ -3,7 +3,9 @@ let photos = [];
 let currentIndex = 0;
 
 async function init() {
-  const token = window.location.pathname.split('/').pop();
+  // Support both /share/:token path and ?token= query param (CF Workers redirect)
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('token') || window.location.pathname.split('/').pop();
   if (!token) {
     document.getElementById('shareInfo').textContent = '无效的分享链接';
     return;

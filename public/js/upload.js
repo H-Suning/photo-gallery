@@ -8,6 +8,9 @@ const grid = document.getElementById('previewGrid');
 const count = document.getElementById('fileCount');
 const btn = document.getElementById('uploadBtn');
 
+const CLOUD_NAME = 'dujsw8fkh';
+const UPLOAD_PRESET = 'it4ocs5n';
+
 area.addEventListener('click', () => input.click());
 
 input.addEventListener('change', () => {
@@ -30,7 +33,6 @@ area.addEventListener('drop', (e) => {
 
 // Mobile: also support touch-based capture
 document.addEventListener('DOMContentLoaded', () => {
-  // If on mobile, the capture attribute on input will handle it
   if (/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
     input.removeAttribute('capture');
     input.setAttribute('capture', 'environment');
@@ -69,6 +71,36 @@ function renderPreviews() {
   });
 }
 
+async function uploadToCloudinary(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', UPLOAD_PRESET);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) throw new Error(`Cloudinary upload failed: ${res.status}`);
+  return res.json();
+}
+
+async function tagOnBackend(data) {
+  const res = await fetch('/api/upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      public_id: data.public_id,
+      secure_url: data.secure_url,
+      format: data.format,
+      bytes: data.bytes,
+      width: data.width,
+      height: data.height,
+    }),
+  });
+  if (!res.ok) throw new Error('Backend tag failed');
+  return res.json();
+}
+
 async function startUpload() {
   if (selectedFiles.length === 0) return showToast('请先选择照片');
   btn.disabled = true;
@@ -82,11 +114,9 @@ async function startUpload() {
   let completed = 0;
 
   for (const file of selectedFiles) {
-    const formData = new FormData();
-    formData.append('image', file);
     try {
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      if (!res.ok) throw new Error('上传失败');
+      const cloudData = await uploadToCloudinary(file);
+      await tagOnBackend(cloudData);
     } catch (e) {
       showToast(`${file.name} 上传失败: ${e.message}`);
     }
