@@ -29,7 +29,6 @@ function ensureCloudinary() {
 
 app.use(express.json({ limit: '50mb' }));
 app.use((req, res, next) => { ensureCloudinary(); next(); });
-console.log('ENV:', { n: !!process.env.CLOUDINARY_CLOUD_NAME, k: !!process.env.CLOUDINARY_API_KEY, s: !!process.env.CLOUDINARY_API_SECRET });
 
 // In production (Cloudflare Workers), static files are served at the edge by wrangler assets.
 // On local Node.js, serve from the public/ directory.
