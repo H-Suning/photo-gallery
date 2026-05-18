@@ -12,15 +12,18 @@ const FOLDER = 'photo-gallery';
 const runningOnCFWorker = typeof process !== 'undefined' && process.env && process.env.CF_WORKER;
 
 // Lazy Cloudinary init — avoids Railway build-time secret resolution
-let cloudinaryReady = false;
 function ensureCloudinary() {
-  if (!cloudinaryReady) {
+  const ccName = process.env.CLOUDINARY_CLOUD_NAME;
+  const ccKey = process.env.CLOUDINARY_API_KEY;
+  const ccSecret = process.env.CLOUDINARY_API_SECRET;
+  if (ccName && ccKey && ccSecret) {
     cloudinary.config({
-      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-      api_key: process.env.CLOUDINARY_API_KEY,
-      api_secret: process.env.CLOUDINARY_API_SECRET,
+      cloud_name: ccName,
+      api_key: ccKey,
+      api_secret: ccSecret,
     });
-    cloudinaryReady = true;
+  } else {
+    console.warn('Cloudinary env vars not set yet');
   }
 }
 
