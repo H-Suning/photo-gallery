@@ -23,12 +23,13 @@ function ensureCloudinary() {
       api_secret: ccSecret,
     });
   } else {
-    console.warn('Cloudinary env vars not set yet');
+    console.warn('Cloudinary env vars not set yet at', new Date().toISOString());
   }
 }
 
 app.use(express.json({ limit: '50mb' }));
 app.use((req, res, next) => { ensureCloudinary(); next(); });
+console.log('ENV:', { n: !!process.env.CLOUDINARY_CLOUD_NAME, k: !!process.env.CLOUDINARY_API_KEY, s: !!process.env.CLOUDINARY_API_SECRET });
 
 // In production (Cloudflare Workers), static files are served at the edge by wrangler assets.
 // On local Node.js, serve from the public/ directory.
@@ -93,8 +94,8 @@ app.get('/api/photos', async (req, res) => {
     if (req.query.sort === 'oldest') photos.reverse();
     res.json(photos);
   } catch (err) {
-    console.error('List error:', err);
-    res.status(500).json({ error: err.message });
+    console.error('List error:', err?.message || err, err?.stack);
+    res.status(500).json({ error: err?.message || 'Unknown error' });
   }
 });
 
@@ -151,7 +152,7 @@ app.put('/api/photos/:id/feature', async (req, res) => {
     }
     res.json({ featured: !isFeatured });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err?.message || 'Unknown error' });
   }
 });
 
@@ -161,7 +162,7 @@ app.delete('/api/photos/:id', async (req, res) => {
     await cloudinary.uploader.destroy(req.params.id);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err?.message || 'Unknown error' });
   }
 });
 
@@ -196,7 +197,7 @@ app.post('/api/download', async (req, res) => {
     }
     await archive.finalize();
   } catch (err) {
-    if (!res.headersSent) res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err?.message || 'Unknown error' });
   }
 });
 
