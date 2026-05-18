@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: photo-gallery
+    runtime: node
+    repo: https://github.com/H-Suning/photo-gallery
+    plan: free
+    region: singapore
+    branch: master
+    buildCommand: npm install --legacy-peer-deps
+    startCommand: node server.js
+    envVars:
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: PORT
+        value: "10000"
