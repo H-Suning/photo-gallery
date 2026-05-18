@@ -1,19 +1,23 @@
 // ===== Gallery (Homepage) =====
 let photos = [];
 let currentIndex = 0;
+let autoScrollTimer = null;
+const MAX_PHOTOS = 10;
+const AUTO_SCROLL_INTERVAL = 3000; // ms
 
 async function loadGallery() {
   try {
     const res = await fetch('/api/photos?featured=true');
-    photos = await res.json();
+    let all = await res.json();
+    photos = all.slice(0, MAX_PHOTOS);
   } catch { photos = []; }
   renderGallery();
+  startAutoScroll();
 }
 
 function renderGallery() {
   const scroll = document.getElementById('galleryScroll');
   const empty = document.getElementById('emptyState');
-  // Clear all children except empty state
   scroll.querySelectorAll('.gallery-card').forEach(el => el.remove());
 
   if (photos.length === 0) {
@@ -22,14 +26,63 @@ function renderGallery() {
   }
   empty.style.display = 'none';
 
+  // Set scroll container as a carousel
+  scroll.classList.add('carousel');
+
   photos.forEach((photo, i) => {
     const card = document.createElement('div');
     card.className = 'gallery-card';
-    card.style.animationDelay = `${(i % 6) * 0.05}s`;
+    card.dataset.index = i;
     card.innerHTML = `<img src="${photo.secure_url}" alt="photo" loading="lazy">`;
     card.addEventListener('click', () => openLightbox(i));
     scroll.appendChild(card);
   });
+
+  // Update indicator
+  updateIndicator();
+}
+
+// Auto-scroll carousel
+function startAutoScroll() {
+  stopAutoScroll();
+  if (photos.length <= 1) return;
+  autoScrollTimer = setInterval(() => {
+    const scroll = document.getElementById('galleryScroll');
+    if (!scroll) return;
+    const card = scroll.querySelector('.gallery-card');
+    if (!card) return;
+    const cardWidth = card.offsetWidth + parseInt(getComputedStyle(card).marginRight || 0);
+    const maxScroll = scroll.scrollWidth - scroll.clientWidth;
+    const next = scroll.scrollLeft + cardWidth;
+    if (next >= maxScroll) {
+      scroll.scrollTo({ left: 0, behavior: 'smooth' });
+    } else {
+      scroll.scrollTo({ left: next, behavior: 'smooth' });
+    }
+  }, AUTO_SCROLL_INTERVAL);
+}
+
+function stopAutoScroll() {
+  if (autoScrollTimer) {
+    clearInterval(autoScrollTimer);
+    autoScrollTimer = null;
+  }
+}
+
+// Pause on hover/touch
+document.addEventListener('DOMContentLoaded', () => {
+  const scroll = document.getElementById('galleryScroll');
+  if (!scroll) return;
+  scroll.addEventListener('mouseenter', stopAutoScroll);
+  scroll.addEventListener('mouseleave', startAutoScroll);
+  scroll.addEventListener('touchstart', stopAutoScroll);
+  scroll.addEventListener('touchend', startAutoScroll);
+});
+
+function updateIndicator() {
+  // Remove existing indicator
+  const old = document.querySelector('.carousel-indicator');
+  if (old) old.remove();
 }
 
 // Dragging
@@ -40,9 +93,10 @@ function renderGallery() {
   scroll.addEventListener('mousedown', (e) => {
     isDown = true; startX = e.pageX - scroll.offsetLeft; scrollLeft = scroll.scrollLeft;
     scroll.classList.add('dragging');
+    stopAutoScroll();
   });
   scroll.addEventListener('mouseleave', () => { isDown = false; scroll.classList.remove('dragging'); });
-  scroll.addEventListener('mouseup', () => { isDown = false; scroll.classList.remove('dragging'); });
+  scroll.addEventListener('mouseup', () => { isDown = false; scroll.classList.remove('dragging'); startAutoScroll(); });
   scroll.addEventListener('mousemove', (e) => {
     if (!isDown) return;
     e.preventDefault();
@@ -64,7 +118,6 @@ function openLightbox(index) {
   info.textContent = `${index + 1} / ${photos.length}`;
   lb.classList.add('open');
   document.body.style.overflow = 'hidden';
-  // Keyboard nav
   document.addEventListener('keydown', lightboxKeyHandler);
 }
 

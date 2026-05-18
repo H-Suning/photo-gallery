@@ -82,9 +82,9 @@ app.get('/api/photos', async (req, res) => {
         order: 'desc',
       });
     } else {
-      result = await cloudinary.api.resources({
-        type: 'upload',
-        prefix: FOLDER + '/',
+      // All photos: query by the featured tag (since browser uploads don't use a folder prefix)
+      result = await cloudinary.api.resources_by_tag(TAG_FEATURED, {
+        resource_type: 'image',
         max_results: 500,
         order: 'desc',
       });
