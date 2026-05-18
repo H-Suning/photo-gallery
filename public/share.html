@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>分享相册</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .share-header { text-align: center; padding: 48px 24px 24px; }
+    .share-header h1 { font-size: 24px; color: #0f172a; }
+    .share-header p { color: #64748b; font-size: 14px; margin-top: 4px; }
+    .share-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; padding: 0 24px 48px; max-width: 1200px; margin: 0 auto; }
+    .share-grid .photo-item { cursor: default; }
+    .share-error { text-align: center; padding: 80px 24px; color: #64748b; }
+    .share-error h2 { font-size: 20px; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <main id="shareContent">
+    <div class="share-header">
+      <h1>分享相册</h1>
+      <p id="shareInfo">加载中...</p>
+    </div>
+    <div class="share-grid" id="shareGrid"></div>
+  </main>
+
+  <!-- Lightbox -->
+  <div class="lightbox" id="lightbox">
+    <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+    <button class="lightbox-nav prev" onclick="navigateLightbox(-1)">‹</button>
+    <button class="lightbox-nav next" onclick="navigateLightbox(1)">›</button>
+    <div class="lightbox-img-wrap">
+      <img id="lightboxImg" src="" alt="">
+    </div>
+    <div class="lightbox-info" id="lightboxInfo"></div>
+  </div>
+
+  <script src="/js/share.js"></script>
+</body>
+</html>
