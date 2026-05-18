@@ -93,8 +93,8 @@ app.get('/api/photos', async (req, res) => {
     if (req.query.sort === 'oldest') photos.reverse();
     res.json(photos);
   } catch (err) {
-    console.error('List error:', err?.message || err, err?.stack);
-    res.status(500).json({ error: err?.message || 'Unknown error' });
+    console.error('List error:', JSON.stringify(err), err?.stack);
+    res.status(500).json({ error: err?.message || JSON.stringify(err) });
   }
 });
 
