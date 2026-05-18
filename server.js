@@ -6,7 +6,7 @@ const https = require('https');
 const archiver = require('archiver');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const TAG_FEATURED = 'gallery-featured';
 const FOLDER = 'photo-gallery';
 const runningOnCFWorker = typeof process !== 'undefined' && process.env && process.env.CF_WORKER;
