@@ -278,6 +278,7 @@ app.get('/share/:token', (req, res) => {
 if (!runningOnCFWorker) {
   app.listen(PORT, () => {
     console.log(`Photo Gallery running at http://localhost:${PORT}`);
+    console.log('Build cache buster: 20260519');
   });
 }
 
