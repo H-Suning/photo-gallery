@@ -154,7 +154,7 @@ app.post('/api/upload-multiple', async (req, res) => {
   try {
     const tags = [TAG_FEATURED];
     if (commonYear) tags.push(TAG_YEAR_PREFIX + commonYear);
-    await cloudinary.api.add_tag(tags, ids);
+    await cloudinary.uploader.add_tag(tags.join(','), ids);
   } catch (e) { console.warn('Tag failed:', e.message); }
   const photos = files.map(f => toPhoto({
     public_id: f.public_id,
@@ -176,9 +176,9 @@ app.put('/api/photos/:id/feature', async (req, res) => {
     const r = await cloudinary.api.resource(pubId);
     const isFeatured = r.tags && r.tags.includes(TAG_FEATURED);
     if (isFeatured) {
-      await cloudinary.api.remove_tag(TAG_FEATURED, [pubId]);
+      await cloudinary.uploader.remove_tag(TAG_FEATURED, [pubId]);
     } else {
-      await cloudinary.api.add_tag(TAG_FEATURED, [pubId]);
+      await cloudinary.uploader.add_tag(TAG_FEATURED, [pubId]);
     }
     res.json({ featured: !isFeatured });
   } catch (err) {
@@ -204,9 +204,9 @@ app.put('/api/photos/:id/cover', async (req, res) => {
     const r = await cloudinary.api.resource(pubId);
     const isCover = r.tags && r.tags.includes(TAG_COVER);
     if (isCover) {
-      await cloudinary.api.remove_tag(TAG_COVER, [pubId]);
+      await cloudinary.uploader.remove_tag(TAG_COVER, [pubId]);
     } else {
-      await cloudinary.api.add_tag(TAG_COVER, [pubId]);
+      await cloudinary.uploader.add_tag(TAG_COVER, [pubId]);
     }
     res.json({ covered: !isCover });
   } catch (err) {
@@ -226,10 +226,10 @@ app.put('/api/photos/:id/year', async (req, res) => {
     // Remove old year tag
     const oldYearTag = tags.find(t => t.startsWith(TAG_YEAR_PREFIX));
     if (oldYearTag) {
-      await cloudinary.api.remove_tag(oldYearTag, [pubId]);
+      await cloudinary.uploader.remove_tag(oldYearTag, [pubId]);
     }
     // Add new year tag
-    await cloudinary.api.add_tag(TAG_YEAR_PREFIX + year, [pubId]);
+    await cloudinary.uploader.add_tag(TAG_YEAR_PREFIX + year, [pubId]);
     res.json({ year });
   } catch (err) {
     console.error('Year set error:', err.message);
