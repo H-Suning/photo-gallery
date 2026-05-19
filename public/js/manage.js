@@ -1,6 +1,7 @@
 // ===== Manage =====
 let allPhotos = [];
 let currentIndex = 0;
+let dragSrcIndex = null;
 
 async function loadPhotos() {
   try {
@@ -27,6 +28,8 @@ function render() {
   allPhotos.forEach((photo, i) => {
     const div = document.createElement('div');
     div.className = 'photo-item';
+    div.draggable = true;
+    div.dataset.index = i;
     div.innerHTML = `
       <div class="check-wrap">
         <input type="checkbox" data-i="${i}">
@@ -35,6 +38,9 @@ function render() {
       <div class="photo-actions">
         <button class="btn-star ${photo.featured ? 'active' : ''}" data-i="${i}" title="精选">
           <svg viewBox="0 0 24 24" fill="${photo.featured ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" width="16" height="16"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        </button>
+        <button class="btn-cover ${photo.covered ? 'active' : ''}" data-i="${i}" title="封面">
+          <svg viewBox="0 0 24 24" fill="${photo.covered ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
         </button>
         <button class="btn-del" data-i="${i}" title="删除">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -49,6 +55,11 @@ function render() {
       e.stopPropagation();
       await toggleFeature(photo.id);
     });
+    // Cover toggle
+    div.querySelector('.btn-cover').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await toggleCover(photo.id);
+    });
     // Delete
     div.querySelector('.btn-del').addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -57,6 +68,39 @@ function render() {
     });
     // Checkbox
     div.querySelector('input[type="checkbox"]').addEventListener('change', updateSelectAllBtn);
+
+    // Drag events
+    div.addEventListener('dragstart', (e) => {
+      dragSrcIndex = i;
+      div.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', i);
+    });
+    div.addEventListener('dragend', () => {
+      div.classList.remove('dragging');
+      document.querySelectorAll('.photo-item').forEach(el => el.classList.remove('drag-over'));
+    });
+    div.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      document.querySelectorAll('.photo-item').forEach(el => el.classList.remove('drag-over'));
+      div.classList.add('drag-over');
+    });
+    div.addEventListener('dragleave', () => {
+      div.classList.remove('drag-over');
+    });
+    div.addEventListener('drop', (e) => {
+      e.preventDefault();
+      div.classList.remove('drag-over');
+      const fromIdx = dragSrcIndex;
+      const toIdx = i;
+      if (fromIdx === toIdx) return;
+      // Reorder array
+      const [moved] = allPhotos.splice(fromIdx, 1);
+      allPhotos.splice(toIdx, 0, moved);
+      render();
+      showToast('顺序已调整，点击"保存排序"持久化');
+    });
 
     grid.appendChild(div);
   });
@@ -76,6 +120,20 @@ async function toggleFeature(id) {
   }
 }
 
+async function toggleCover(id) {
+  try {
+    const res = await fetch(`/api/photos/${encodeURIComponent(id)}/cover`, { method: 'PUT' });
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    const photo = allPhotos.find(p => p.id === id);
+    if (photo) photo.covered = data.covered;
+    render();
+    showToast(data.covered ? '已设为封面' : '已取消封面');
+  } catch {
+    showToast('操作失败');
+  }
+}
+
 async function deletePhoto(id) {
   try {
     const res = await fetch(`/api/photos/${encodeURIComponent(id)}`, { method: 'DELETE' });
@@ -85,6 +143,23 @@ async function deletePhoto(id) {
     showToast('已删除');
   } catch {
     showToast('删除失败');
+  }
+}
+
+// Save order to backend
+async function saveOrder() {
+  if (allPhotos.length === 0) return;
+  const orderedIds = allPhotos.map(p => p.id);
+  try {
+    const res = await fetch('/api/photos/reorder', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderedIds }),
+    });
+    if (!res.ok) throw new Error();
+    showToast('排序已保存');
+  } catch {
+    showToast('保存排序失败');
   }
 }
 

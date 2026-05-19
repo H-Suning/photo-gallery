@@ -53,6 +53,8 @@ function toPhoto(r) {
     height: r.height,
     created_at: r.created_at,
     featured: r.tags ? r.tags.includes(TAG_FEATURED) : false,
+    covered: r.tags ? r.tags.includes('gallery-cover') : false,
+    sortOrder: r.context && r.context.custom ? parseInt(r.context.custom.carousel_order) : null,
   };
 }
 
@@ -80,16 +82,24 @@ app.get('/api/photos', async (req, res) => {
         resource_type: 'image',
         max_results: 500,
         order: 'desc',
+        context: true,
       });
     } else {
-      // All photos: query by the featured tag (since browser uploads don't use a folder prefix)
       result = await cloudinary.api.resources_by_tag(TAG_FEATURED, {
         resource_type: 'image',
         max_results: 500,
         order: 'desc',
+        context: true,
       });
     }
     const photos = (result.resources || []).map(toPhoto);
+    // Sort by carousel_order if available (unset items go last)
+    photos.sort((a, b) => {
+      if (a.sortOrder !== null && b.sortOrder !== null) return a.sortOrder - b.sortOrder;
+      if (a.sortOrder !== null) return -1;
+      if (b.sortOrder !== null) return 1;
+      return 0;
+    });
     if (req.query.sort === 'oldest') photos.reverse();
     res.json(photos);
   } catch (err) {
@@ -159,6 +169,40 @@ app.put('/api/photos/:id/feature', async (req, res) => {
 app.delete('/api/photos/:id', async (req, res) => {
   try {
     await cloudinary.uploader.destroy(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Unknown error' });
+  }
+});
+
+// Toggle cover
+app.put('/api/photos/:id/cover', async (req, res) => {
+  try {
+    const pubId = req.params.id;
+    const r = await cloudinary.api.resource(pubId);
+    const isCover = r.tags && r.tags.includes('gallery-cover');
+    if (isCover) {
+      await cloudinary.api.remove_tag('gallery-cover', [pubId]);
+    } else {
+      await cloudinary.api.add_tag('gallery-cover', [pubId]);
+    }
+    res.json({ covered: !isCover });
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Unknown error' });
+  }
+});
+
+// Reorder photos for carousel
+app.put('/api/photos/reorder', async (req, res) => {
+  const { orderedIds } = req.body;
+  if (!orderedIds || !orderedIds.length) return res.status(400).json({ error: 'No orderedIds' });
+  try {
+    await Promise.all(orderedIds.map((id, i) =>
+      cloudinary.uploader.explicit(id, {
+        type: 'upload',
+        context: `carousel_order=${i}`,
+      })
+    ));
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err?.message || 'Unknown error' });

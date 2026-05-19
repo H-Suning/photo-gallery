@@ -31,14 +31,6 @@ area.addEventListener('drop', (e) => {
   handleFiles(e.dataTransfer.files);
 });
 
-// Mobile: also support touch-based capture
-document.addEventListener('DOMContentLoaded', () => {
-  if (/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
-    input.removeAttribute('capture');
-    input.setAttribute('capture', 'environment');
-  }
-});
-
 function handleFiles(files) {
   const newFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
   if (newFiles.length === 0) return showToast('请选择图片文件');
