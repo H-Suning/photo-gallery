@@ -1,5 +1,6 @@
-// ===== Upload =====
+// ===== Upload — 上传页面 =====
 let selectedFiles = [];
+let availableYears = [];
 
 const area = document.getElementById('uploadArea');
 const input = document.getElementById('fileInput');
@@ -11,28 +12,7 @@ const btn = document.getElementById('uploadBtn');
 const CLOUD_NAME = 'dujsw8fkh';
 const UPLOAD_PRESET = 'it4ocs5n';
 
-area.addEventListener('click', () => input.click());
-
-input.addEventListener('change', () => {
-  handleFiles(input.files);
-  input.value = '';
-});
-
-area.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  area.classList.add('dragover');
-});
-area.addEventListener('dragleave', () => {
-  area.classList.remove('dragover');
-});
-area.addEventListener('drop', (e) => {
-  e.preventDefault();
-  area.classList.remove('dragover');
-  handleFiles(e.dataTransfer.files);
-});
-
-// Load available years for the dropdown
-let availableYears = [];
+// Load years for dropdown
 fetch('/api/years').then(r => r.json()).then(years => {
   availableYears = years;
   populateYearSelect();
@@ -41,21 +21,17 @@ fetch('/api/years').then(r => r.json()).then(years => {
 function populateYearSelect() {
   const sel = document.getElementById('yearSelect');
   if (!sel) return;
-  // Keep existing custom options
-  const currentVal = sel.value;
+  const cur = sel.value;
   sel.innerHTML = '<option value="">不选择年份</option>';
   availableYears.forEach(y => {
-    const opt = document.createElement('option');
-    opt.value = y;
-    opt.textContent = y;
-    sel.appendChild(opt);
+    const o = document.createElement('option');
+    o.value = y; o.textContent = y;
+    sel.appendChild(o);
   });
-  // Custom option
-  const customOpt = document.createElement('option');
-  customOpt.value = '__custom__';
-  customOpt.textContent = '自定义年份...';
-  sel.appendChild(customOpt);
-  sel.value = currentVal;
+  const co = document.createElement('option');
+  co.value = '__custom__'; co.textContent = '自定义年份...';
+  sel.appendChild(co);
+  sel.value = cur;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -63,14 +39,14 @@ document.addEventListener('DOMContentLoaded', () => {
   if (sel) {
     sel.addEventListener('change', () => {
       if (sel.value === '__custom__') {
-        const custom = prompt('输入年份（例如 2020）');
-        if (custom && /^\d{4}$/.test(custom)) {
-          if (!availableYears.includes(custom)) {
-            availableYears.push(custom);
+        const y = prompt('输入4位年份（例如 2024）');
+        if (y && /^\d{4}$/.test(y)) {
+          if (!availableYears.includes(y)) {
+            availableYears.push(y);
             availableYears.sort((a, b) => parseInt(b) - parseInt(a));
             populateYearSelect();
           }
-          sel.value = custom;
+          sel.value = y;
         } else {
           sel.value = '';
         }
@@ -79,74 +55,62 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+area.addEventListener('click', () => input.click());
+
+input.addEventListener('change', () => {
+  handleFiles(input.files);
+  input.value = '';
+});
+
+area.addEventListener('dragover', e => { e.preventDefault(); area.classList.add('dragover'); });
+area.addEventListener('dragleave', () => area.classList.remove('dragover'));
+area.addEventListener('drop', e => {
+  e.preventDefault();
+  area.classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+});
+
 function handleFiles(files) {
-  const newFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
-  if (newFiles.length === 0) return showToast('请选择图片文件');
-  selectedFiles = [...selectedFiles, ...newFiles];
+  const imgs = Array.from(files).filter(f => f.type.startsWith('image/'));
+  if (!imgs.length) return showToast('请选择图片文件');
+  selectedFiles = [...selectedFiles, ...imgs];
   renderPreviews();
 }
 
 function renderPreviews() {
-  if (selectedFiles.length === 0) {
-    preview.style.display = 'none';
-    return;
-  }
+  if (!selectedFiles.length) { preview.style.display = 'none'; return; }
   preview.style.display = 'block';
   count.textContent = selectedFiles.length;
   grid.innerHTML = '';
-  selectedFiles.forEach((file, i) => {
-    const div = document.createElement('div');
-    div.className = 'preview-item';
-    const url = URL.createObjectURL(file);
-    div.innerHTML = `
-      <img src="${url}" alt="">
-      <button class="remove-preview" data-i="${i}">✕</button>
-    `;
-    div.querySelector('.remove-preview').addEventListener('click', (e) => {
-      e.stopPropagation();
-      selectedFiles.splice(i, 1);
-      renderPreviews();
-    });
-    grid.appendChild(div);
+  selectedFiles.forEach((f, i) => {
+    const d = document.createElement('div');
+    d.className = 'preview-item';
+    d.innerHTML = `<img src="${URL.createObjectURL(f)}" alt=""><button class="remove-preview" data-i="${i}">✕</button>`;
+    d.querySelector('.remove-preview').addEventListener('click', e => { e.stopPropagation(); selectedFiles.splice(i, 1); renderPreviews(); });
+    grid.appendChild(d);
   });
 }
 
 async function uploadToCloudinary(file) {
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('upload_preset', UPLOAD_PRESET);
-
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
-    method: 'POST',
-    body: formData,
-  });
-  if (!res.ok) throw new Error(`Cloudinary upload failed: ${res.status}`);
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('upload_preset', UPLOAD_PRESET);
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: 'POST', body: fd });
+  if (!res.ok) throw new Error('Cloudinary upload failed: ' + res.status);
   return res.json();
 }
 
 async function tagOnBackend(data, year) {
-  const payload = {
-    public_id: data.public_id,
-    secure_url: data.secure_url,
-    format: data.format,
-    bytes: data.bytes,
-    width: data.width,
-    height: data.height,
-  };
-  if (year) payload.year = year;
-  const res = await fetch('/api/upload', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  const body = { public_id: data.public_id, secure_url: data.secure_url, format: data.format, bytes: data.bytes, width: data.width, height: data.height };
+  if (year) body.year = year;
+  const res = await fetch('/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error('Backend tag failed');
   return res.json();
 }
 
 async function startUpload() {
-  if (selectedFiles.length === 0) return showToast('请先选择照片');
-  const yearSel = document.getElementById('yearSelect');
-  const selectedYear = yearSel ? yearSel.value : '';
+  if (!selectedFiles.length) return showToast('请先选择照片');
+  const year = document.getElementById('yearSelect')?.value || '';
   btn.disabled = true;
   btn.textContent = '上传中...';
   const progress = document.getElementById('uploadProgress');
@@ -154,29 +118,25 @@ async function startUpload() {
   const status = document.getElementById('uploadStatus');
   progress.style.display = 'block';
 
-  const total = selectedFiles.length;
-  let completed = 0;
-
+  let done = 0;
   for (const file of selectedFiles) {
     try {
       const cloudData = await uploadToCloudinary(file);
-      await tagOnBackend(cloudData, selectedYear);
+      await tagOnBackend(cloudData, year);
     } catch (e) {
       showToast(`${file.name} 上传失败: ${e.message}`);
     }
-    completed++;
-    const pct = Math.round((completed / total) * 100);
-    bar.style.width = pct + '%';
-    status.textContent = `已上传 ${completed}/${total}`;
+    done++;
+    bar.style.width = Math.round((done / selectedFiles.length) * 100) + '%';
+    status.textContent = `已上传 ${done}/${selectedFiles.length}`;
   }
 
   progress.style.display = 'none';
   btn.disabled = false;
   btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> 上传到云端`;
-
   selectedFiles = [];
   renderPreviews();
-  showToast(`完成！共上传 ${completed} 张照片`);
+  showToast(`完成！共上传 ${done} 张照片`);
 }
 
 function showToast(msg) {
