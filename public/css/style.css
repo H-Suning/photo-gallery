@@ -30,7 +30,6 @@ body {
   --text-secondary: #6b7280;
   --text-muted: #94a3b8;
   --star-color: #f59e0b;
-  --cover-color: #10b981;
 }
 
 /* ===== Navbar ===== */
@@ -469,9 +468,6 @@ body {
 .btn-star { background: rgba(255,255,255,0.9); color: #94a3b8; }
 .btn-star.active { color: var(--star-color); }
 .btn-star:hover { background: #fff; transform: scale(1.1); }
-.btn-cover { background: rgba(255,255,255,0.9); color: #94a3b8; }
-.btn-cover.active { color: var(--cover-color); }
-.btn-cover:hover { background: #fff; transform: scale(1.1); }
 .btn-year { background: rgba(255,255,255,0.9); color: #94a3b8; font-size: 14px; padding: 0; }
 .btn-year:hover { background: #fff; color: var(--primary); }
 .btn-del { background: rgba(239,68,68,0.85); color: #fff; }

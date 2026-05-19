@@ -8,7 +8,6 @@ const archiver = require('archiver');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const TAG_FEATURED = 'gallery-featured';
-const TAG_COVER = 'gallery-cover';
 const TAG_YEAR_PREFIX = 'year-';
 const runningOnCFWorker = typeof process !== 'undefined' && process.env && process.env.CF_WORKER;
 
@@ -52,7 +51,6 @@ function toPhoto(r) {
     height: r.height,
     created_at: r.created_at,
     featured: tags.includes(TAG_FEATURED),
-    covered: tags.includes(TAG_COVER),
     year: tags.find(t => t.startsWith(TAG_YEAR_PREFIX))?.replace(TAG_YEAR_PREFIX, '') || null,
     sortOrder: r.context && r.context.custom ? parseInt(r.context.custom.carousel_order) : null,
     featuredOrder: r.context && r.context.custom ? parseInt(r.context.custom.featured_order) : null,
@@ -234,24 +232,6 @@ app.delete('/api/photos/:id', async (req, res) => {
     await cloudinary.uploader.destroy(req.params.id);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err?.message || 'Unknown error' });
-  }
-});
-
-// Toggle cover
-app.put('/api/photos/:id/cover', async (req, res) => {
-  try {
-    const pubId = req.params.id;
-    const r = await cloudinary.api.resource(pubId);
-    const isCover = r.tags && r.tags.includes(TAG_COVER);
-    if (isCover) {
-      await cloudinary.uploader.remove_tag(TAG_COVER, [pubId]);
-    } else {
-      await cloudinary.uploader.add_tag(TAG_COVER, [pubId]);
-    }
-    res.json({ covered: !isCover });
-  } catch (err) {
-    console.error('Cover toggle error:', err.message);
     res.status(500).json({ error: err?.message || 'Unknown error' });
   }
 });

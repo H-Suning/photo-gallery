@@ -43,7 +43,6 @@ function render() {
       <img src="${optimizedUrl(photo.secure_url, 300)}" alt="photo" loading="lazy">
       <div class="photo-actions">
         <button class="btn-star ${photo.featured ? 'active' : ''}" data-i="${i}" title="精选">★</button>
-        <button class="btn-cover ${photo.covered ? 'active' : ''}" data-i="${i}" title="封面">📁</button>
         <button class="btn-year" data-i="${i}" title="年份">📅</button>
         <button class="btn-del" data-i="${i}" title="删除">🗑</button>
       </div>
@@ -52,7 +51,7 @@ function render() {
 
     div.querySelector('img').addEventListener('click', () => openLightbox(i));
     div.querySelector('.btn-star').addEventListener('click', e => { e.stopPropagation(); toggleFeatured(photo.id, i); });
-    div.querySelector('.btn-cover').addEventListener('click', e => { e.stopPropagation(); toggleAttr('cover', photo.id); });
+
     div.querySelector('.btn-year').addEventListener('click', e => { e.stopPropagation(); showYearPicker(photo.id, i); });
     div.querySelector('.btn-del').addEventListener('click', e => {
       e.stopPropagation();
@@ -76,20 +75,6 @@ function render() {
 
     grid.appendChild(div);
   });
-}
-
-async function toggleAttr(type, id) {
-  try {
-    const res = await fetch(`/api/photos/${encodeURIComponent(id)}/${type}`, { method: 'PUT' });
-    if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
-    const data = await res.json();
-    const p = allPhotos.find(x => x.id === id);
-    if (p && type === 'cover') p.covered = data.covered;
-    render();
-    showToast(data.covered ? '已设为封面' : '已取消封面');
-  } catch (e) {
-    showToast('操作失败: ' + e.message);
-  }
 }
 
 async function toggleFeatured(photoId, idx) {
