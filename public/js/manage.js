@@ -38,7 +38,6 @@ function render() {
       <div class="check-wrap"><input type="checkbox" data-i="${i}"></div>
       <img src="${photo.secure_url}" alt="photo" loading="lazy">
       <div class="photo-actions">
-        <button class="btn-star ${photo.featured ? 'active' : ''}" data-i="${i}" title="精选">★</button>
         <button class="btn-cover ${photo.covered ? 'active' : ''}" data-i="${i}" title="封面">📁</button>
         <button class="btn-year" data-i="${i}" title="年份">📅</button>
         <button class="btn-del" data-i="${i}" title="删除">🗑</button>
@@ -47,7 +46,6 @@ function render() {
     `;
 
     div.querySelector('img').addEventListener('click', () => openLightbox(i));
-    div.querySelector('.btn-star').addEventListener('click', e => { e.stopPropagation(); toggleAttr('feature', photo.id); });
     div.querySelector('.btn-cover').addEventListener('click', e => { e.stopPropagation(); toggleAttr('cover', photo.id); });
     div.querySelector('.btn-year').addEventListener('click', e => { e.stopPropagation(); showYearPicker(photo.id, i); });
     div.querySelector('.btn-del').addEventListener('click', e => {
@@ -80,15 +78,9 @@ async function toggleAttr(type, id) {
     if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
     const data = await res.json();
     const p = allPhotos.find(x => x.id === id);
-    if (p) {
-      if (type === 'feature') p.featured = data.featured;
-      if (type === 'cover') p.covered = data.covered;
-    }
+    if (p && type === 'cover') p.covered = data.covered;
     render();
-    const msg = type === 'feature'
-      ? (data.featured ? '已添加到精选' : '已取消精选')
-      : (data.covered ? '已设为封面' : '已取消封面');
-    showToast(msg);
+    showToast(data.covered ? '已设为封面' : '已取消封面');
   } catch (e) {
     showToast('操作失败: ' + e.message);
   }
@@ -241,7 +233,78 @@ async function deleteSelected() {
   showToast(`已删除 ${ids.length} 张照片`);
 }
 
-// ===== Lightbox =====
+// ===== Featured Management =====
+let featuredIds = [];
+
+async function manageFeatured() {
+  // Fetch current featured list
+  try {
+    const res = await fetch('/api/featured');
+    featuredIds = (await res.json()).map(p => p.id);
+  } catch { featuredIds = []; }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay open';
+  overlay.id = 'featuredModal';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+
+  const allPhotosHtml = allPhotos.map((p, i) => {
+    const idx = featuredIds.indexOf(p.id);
+    const isFeatured = idx !== -1;
+    return `<div class="featured-pick-item${isFeatured ? ' featured-selected' : ''}" data-id="${p.id}" data-index="${i}">
+      <img src="${p.secure_url}" alt="photo" loading="lazy">
+      <div class="featured-pick-order">${isFeatured ? (idx + 1) : '+'}</div>
+    </div>`;
+  }).join('');
+
+  overlay.innerHTML = `
+    <div class="modal modal-featured">
+      <h3>精选照片管理</h3>
+      <p>点击照片按顺序选择要展示在首页轮播的照片（1, 2, 3...），再次点击取消选择</p>
+      <div class="featured-preview-list" id="featuredPreviewList">
+        ${featuredIds.length ? featuredIds.map((id, i) => {
+          const p = allPhotos.find(x => x.id === id);
+          return p ? `<span class="featured-chip">${i + 1}. ${p.year || '照片 ' + (i + 1)}</span>` : '';
+        }).join('') : '<span class="featured-chip-placeholder">尚未选择照片</span>'}
+      </div>
+      <div class="featured-pick-grid">${allPhotosHtml}</div>
+      <div class="featured-actions">
+        <button class="btn btn-primary" id="featuredSaveBtn">保存</button>
+        <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">取消</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // Click to toggle featured selection
+  overlay.querySelectorAll('.featured-pick-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.id;
+      const idx = featuredIds.indexOf(id);
+      if (idx !== -1) {
+        featuredIds.splice(idx, 1);
+      } else {
+        featuredIds.push(id);
+      }
+      // Re-render the modal
+      overlay.remove();
+      manageFeatured();
+    });
+  });
+
+  document.getElementById('featuredSaveBtn').addEventListener('click', async () => {
+    try {
+      const res = await fetch('/api/featured', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderedIds: featuredIds }),
+      });
+      if (!res.ok) throw new Error();
+      showToast(`精选照片已保存，共 ${featuredIds.length} 张`);
+      overlay.remove();
+    } catch { showToast('保存失败'); }
+  });
+}
 function openLightbox(index) {
   currentIndex = index;
   const lb = document.getElementById('lightbox');

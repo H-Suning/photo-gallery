@@ -511,6 +511,65 @@ body {
 }
 .modal .btn-close-modal:hover { background: #e2e8f0; }
 
+/* ===== Featured Management Modal ===== */
+.modal-featured { max-width: 700px; max-height: 80vh; overflow-y: auto; }
+.featured-preview-list {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 8px 12px; background: #f1f5f9; border-radius: 10px;
+  margin-bottom: 12px; min-height: 36px; align-items: center;
+}
+.featured-chip {
+  background: #2563eb; color: #fff; padding: 4px 12px;
+  border-radius: 14px; font-size: 12px; font-weight: 600;
+}
+.featured-chip-placeholder { font-size: 13px; color: #94a3b8; }
+.featured-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+  max-height: 360px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+}
+.featured-pick-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 3px solid #e2e8f0;
+  transition: all 0.2s;
+}
+.featured-pick-item:hover { border-color: #60a5fa; transform: translateY(-2px); }
+.featured-pick-item.featured-selected { border-color: #2563eb; }
+.featured-pick-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.featured-pick-order {
+  position: absolute; top: 4px; right: 4px;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(0,0,0,0.6); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700;
+}
+.featured-pick-item.featured-selected .featured-pick-order {
+  background: #2563eb;
+}
+.featured-actions {
+  display: flex; gap: 8px; justify-content: flex-end;
+}
+
+/* ===== Year Add Button ===== */
+.year-add-btn {
+  background: #eff6ff;
+  border-style: dashed;
+  border-color: #93c5fd;
+  color: #2563eb;
+}
+.year-add-btn:hover {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
 /* ===== Toast ===== */
 .toast {
   position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%) translateY(80px);

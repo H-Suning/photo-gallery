@@ -55,6 +55,7 @@ function toPhoto(r) {
     covered: tags.includes(TAG_COVER),
     year: tags.find(t => t.startsWith(TAG_YEAR_PREFIX))?.replace(TAG_YEAR_PREFIX, '') || null,
     sortOrder: r.context && r.context.custom ? parseInt(r.context.custom.carousel_order) : null,
+    featuredOrder: r.context && r.context.custom ? parseInt(r.context.custom.featured_order) : null,
   };
 }
 
@@ -82,17 +83,20 @@ app.get('/api/photos', async (req, res) => {
       context: true,
     };
 
-    // Filter by year tag
+    // Filter by year or featured, otherwise return all photos
     let result;
     if (req.query.year) {
       const yearTag = TAG_YEAR_PREFIX + req.query.year;
       result = await cloudinary.api.resources_by_tag(yearTag, options);
-    } else {
-      // List ALL photos by fetching multiple tag groups
+    } else if (req.query.featured === 'true') {
       result = await cloudinary.api.resources_by_tag(TAG_FEATURED, options);
+    } else {
+      result = await cloudinary.api.resources({ ...options, type: 'upload' });
     }
 
-    const photos = (result.resources || []).map(toPhoto);
+    const photos = (result.resources || [])
+      .filter(r => !r.public_id.startsWith('__gallery_'))
+      .map(toPhoto);
     photos.sort((a, b) => {
       if (a.sortOrder !== null && b.sortOrder !== null) return a.sortOrder - b.sortOrder;
       if (a.sortOrder !== null) return -1;
@@ -107,17 +111,55 @@ app.get('/api/photos', async (req, res) => {
   }
 });
 
-// Get all year tags
+// Get all year tags (from Cloudinary + standalone)
 app.get('/api/years', async (req, res) => {
   try {
     const result = await cloudinary.api.tags({ max_results: 500 });
     const yearTags = (result.tags || [])
       .filter(t => t.startsWith(TAG_YEAR_PREFIX))
       .map(t => t.replace(TAG_YEAR_PREFIX, ''))
+      .concat(standaloneYears)
+      .filter((v, i, a) => a.indexOf(v) === i) // deduplicate
       .sort((a, b) => parseInt(b) - parseInt(a));
     res.json(yearTags);
   } catch (err) {
-    console.error('Years error:', err.message);
+    // If Cloudinary fails, return standalone years
+    const yearTags = standaloneYears.sort((a, b) => parseInt(b) - parseInt(a));
+    res.json(yearTags);
+  }
+});
+
+// Track standalone years (years added without a photo)
+let standaloneYears = [];
+
+// Add a custom year tag (standalone, without requiring a photo)
+app.post('/api/years', async (req, res) => {
+  try {
+    const { year } = req.body;
+    if (!year || !/^\d{4}$/.test(year)) return res.status(400).json({ error: 'Invalid year' });
+    const tag = TAG_YEAR_PREFIX + year;
+
+    // Always track in memory for immediate response
+    if (!standaloneYears.includes(year)) standaloneYears.push(year);
+
+    // Try to persist the tag in Cloudinary using a system manifest resource
+    try {
+      await cloudinary.uploader.add_tag(tag, ['__gallery_years__']);
+    } catch {
+      try {
+        const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+        await cloudinary.uploader.upload(pixel, {
+          public_id: '__gallery_years__',
+          tags: [tag],
+          resource_type: 'image',
+        });
+      } catch (e2) {
+        console.warn('Cloudinary tag creation failed:', e2.message);
+      }
+    }
+    res.json({ success: true, year });
+  } catch (err) {
+    console.error('Add year error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -250,6 +292,70 @@ app.put('/api/photos/reorder', async (req, res) => {
     ));
     res.json({ success: true });
   } catch (err) {
+    res.status(500).json({ error: err?.message || 'Unknown error' });
+  }
+});
+
+// ===================== Featured Management =====================
+
+// Get featured photos (tagged + sorted by featured_order)
+app.get('/api/featured', async (req, res) => {
+  try {
+    const result = await cloudinary.api.resources_by_tag(TAG_FEATURED, {
+      resource_type: 'image',
+      max_results: 500,
+      context: true,
+    });
+    const photos = (result.resources || [])
+      .filter(r => !r.public_id.startsWith('__gallery_'))
+      .map(toPhoto);
+    photos.sort((a, b) => {
+      if (a.featuredOrder !== null && b.featuredOrder !== null) return a.featuredOrder - b.featuredOrder;
+      if (a.featuredOrder !== null) return -1;
+      if (b.featuredOrder !== null) return 1;
+      return 0;
+    });
+    res.json(photos);
+  } catch (err) {
+    console.error('Featured list error:', err.message);
+    res.status(500).json({ error: err?.message || 'Unknown error' });
+  }
+});
+
+// Set featured photos with order
+app.put('/api/featured', async (req, res) => {
+  const { orderedIds } = req.body;
+  if (!orderedIds || !orderedIds.length) {
+    // Clear all featured
+    try {
+      const current = await cloudinary.api.resources_by_tag(TAG_FEATURED, { resource_type: 'image', max_results: 500 });
+      const ids = (current.resources || []).map(r => r.public_id);
+      if (ids.length) await cloudinary.uploader.remove_tag(TAG_FEATURED, ids);
+      return res.json({ success: true, count: 0 });
+    } catch (err) {
+      return res.status(500).json({ error: err?.message || 'Unknown error' });
+    }
+  }
+  try {
+    // First, remove featured tag from ALL photos to clean up
+    const current = await cloudinary.api.resources_by_tag(TAG_FEATURED, { resource_type: 'image', max_results: 500 });
+    const toRemove = (current.resources || [])
+      .map(r => r.public_id)
+      .filter(id => !orderedIds.includes(id));
+    if (toRemove.length) await cloudinary.uploader.remove_tag(TAG_FEATURED, toRemove);
+
+    // Add featured tag + order context to selected photos
+    await Promise.all(orderedIds.map((id, i) =>
+      cloudinary.uploader.explicit(id, {
+        type: 'upload',
+        context: `featured_order=${i}`,
+      })
+    ));
+    await cloudinary.uploader.add_tag(TAG_FEATURED, orderedIds);
+
+    res.json({ success: true, count: orderedIds.length });
+  } catch (err) {
+    console.error('Featured set error:', err.message);
     res.status(500).json({ error: err?.message || 'Unknown error' });
   }
 });

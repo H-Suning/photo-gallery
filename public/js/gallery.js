@@ -182,6 +182,21 @@ async function loadYears() {
     tl.appendChild(b);
   });
 
+  // Add year button
+  const addBtn = document.createElement('button');
+  addBtn.className = 'year-marker year-add-btn';
+  addBtn.textContent = '+ 添加年份';
+  addBtn.addEventListener('click', async () => {
+    const y = prompt('输入4位年份（例如 2024）');
+    if (!y || !/^\d{4}$/.test(y)) { showToast('请输入有效的4位年份'); return; }
+    try {
+      await fetch('/api/years', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ year: y }) });
+      showToast(`已添加 ${y} 年`);
+      loadYears();
+    } catch { showToast('添加年份失败'); }
+  });
+  tl.appendChild(addBtn);
+
   filterYear(null, allBtn);
 }
 
