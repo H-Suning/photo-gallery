@@ -9,6 +9,10 @@ let isHovering = false;
 let isDragging = false;
 let lightboxPhotos = [];
 
+function optimizedUrl(url, w) {
+  return url.replace("/upload/", "/upload/w_" + w + ",q_auto,f_auto/");
+}
+
 const MAX_CAROUSEL = 10;
 const AUTO_INTERVAL = 4000;
 
@@ -50,13 +54,13 @@ function renderCarousel() {
   const count = photos.length;
   const angleStep = 360 / count;
   const size = getCardSize();
-  const radius = Math.max(280, (size / 2) / Math.tan(Math.PI / count) + 80);
+  const radius = count <= 2 ? Math.max(280, size * 2) : Math.max(280, (size / 2) / Math.tan(Math.PI / count) + 80);
 
   photos.forEach((photo, i) => {
     const card = document.createElement('div');
     card.className = 'carousel-3d-card';
-    card.style.transform = `rotateY(${i * angleStep}deg) translateZ(${radius}px)`;
-    card.innerHTML = `<img src="${photo.secure_url}" alt="photo" loading="lazy">`;
+    card.style.transform = count === 1 ? `translateZ(0px)` : `rotateY(${i * angleStep}deg) translateZ(${radius}px)`;
+    card.innerHTML = `<img src="${optimizedUrl(photo.secure_url, 500)}" alt="photo" loading="lazy">`;
     card.addEventListener('click', (e) => {
       e.stopPropagation();
       currentIndex = i;
@@ -155,6 +159,8 @@ async function loadYears() {
     const r = await fetch('/api/photos');
     allPhotos = await r.json();
   } catch { allPhotos = []; }
+  // Remove skeleton placeholders
+  document.querySelectorAll('.skeleton').forEach(el => el.remove());
 
   const section = document.getElementById('yearSection');
   if (!section) return;
@@ -225,7 +231,7 @@ async function filterYear(year, btn) {
   yearPhotos.forEach((p, i) => {
     const div = document.createElement('div');
     div.className = 'year-photo-item';
-    div.innerHTML = `<img src="${p.secure_url}" alt="photo" loading="lazy">`;
+    div.innerHTML = `<img src="${optimizedUrl(p.secure_url, 300)}" alt="photo" loading="lazy">`;
     div.addEventListener('click', () => {
       currentIndex = i;
       lightboxPhotos = yearPhotos;
@@ -242,7 +248,7 @@ function openLightbox() {
   const info = document.getElementById('lightboxInfo');
   const p = lightboxPhotos[currentIndex];
   if (!p) return;
-  img.src = p.secure_url;
+  img.src = optimizedUrl(p.secure_url, 1200);
   info.textContent = `${currentIndex + 1} / ${lightboxPhotos.length}`;
   lb.classList.add('open');
   document.body.style.overflow = 'hidden';

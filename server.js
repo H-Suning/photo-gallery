@@ -169,9 +169,9 @@ app.post('/api/upload', async (req, res) => {
   const { public_id, secure_url, format, bytes, width, height, year } = req.body;
   if (!public_id || !secure_url) return res.status(400).json({ error: 'Missing public_id or secure_url' });
   try {
-    const tags = [TAG_FEATURED];
+    const tags = [];
     if (year) tags.push(TAG_YEAR_PREFIX + year);
-    await cloudinary.uploader.add_tag(tags.join(','), [public_id]);
+    if (tags.length) await cloudinary.uploader.add_tag(tags.join(','), [public_id]);
   } catch (e) {
     console.warn('Tag failed:', e.message);
   }
@@ -183,7 +183,6 @@ app.post('/api/upload', async (req, res) => {
     width: width || 0,
     height: height || 0,
     created_at: new Date().toISOString(),
-    tags: [TAG_FEATURED, year ? TAG_YEAR_PREFIX + year : null].filter(Boolean),
   }));
 });
 
@@ -194,9 +193,9 @@ app.post('/api/upload-multiple', async (req, res) => {
   const ids = files.map(f => f.public_id);
   const commonYear = req.body.year || null;
   try {
-    const tags = [TAG_FEATURED];
+    const tags = [];
     if (commonYear) tags.push(TAG_YEAR_PREFIX + commonYear);
-    await cloudinary.uploader.add_tag(tags.join(','), ids);
+    if (tags.length) await cloudinary.uploader.add_tag(tags.join(','), ids);
   } catch (e) { console.warn('Tag failed:', e.message); }
   const photos = files.map(f => toPhoto({
     public_id: f.public_id,
@@ -206,7 +205,7 @@ app.post('/api/upload-multiple', async (req, res) => {
     width: f.width || 0,
     height: f.height || 0,
     created_at: new Date().toISOString(),
-    tags: [TAG_FEATURED, commonYear ? TAG_YEAR_PREFIX + commonYear : null].filter(Boolean),
+    tags: [commonYear ? TAG_YEAR_PREFIX + commonYear : null].filter(Boolean),
   }));
   res.json(photos);
 });

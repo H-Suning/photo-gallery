@@ -4,6 +4,10 @@ let allYears = [];
 let currentIndex = 0;
 let dragFrom = null;
 
+function optimizedUrl(url, w) {
+  return url.replace('/upload/', `/upload/w_${w},q_auto,f_auto/`);
+}
+
 async function loadPhotos() {
   try {
     const [pr, yr] = await Promise.all([
@@ -36,8 +40,9 @@ function render() {
     div.dataset.index = i;
     div.innerHTML = `
       <div class="check-wrap"><input type="checkbox" data-i="${i}"></div>
-      <img src="${photo.secure_url}" alt="photo" loading="lazy">
+      <img src="${optimizedUrl(photo.secure_url, 300)}" alt="photo" loading="lazy">
       <div class="photo-actions">
+        <button class="btn-star ${photo.featured ? 'active' : ''}" data-i="${i}" title="精选">★</button>
         <button class="btn-cover ${photo.covered ? 'active' : ''}" data-i="${i}" title="封面">📁</button>
         <button class="btn-year" data-i="${i}" title="年份">📅</button>
         <button class="btn-del" data-i="${i}" title="删除">🗑</button>
@@ -46,6 +51,7 @@ function render() {
     `;
 
     div.querySelector('img').addEventListener('click', () => openLightbox(i));
+    div.querySelector('.btn-star').addEventListener('click', e => { e.stopPropagation(); toggleFeatured(photo.id, i); });
     div.querySelector('.btn-cover').addEventListener('click', e => { e.stopPropagation(); toggleAttr('cover', photo.id); });
     div.querySelector('.btn-year').addEventListener('click', e => { e.stopPropagation(); showYearPicker(photo.id, i); });
     div.querySelector('.btn-del').addEventListener('click', e => {
@@ -84,6 +90,17 @@ async function toggleAttr(type, id) {
   } catch (e) {
     showToast('操作失败: ' + e.message);
   }
+}
+
+async function toggleFeatured(photoId, idx) {
+  try {
+    const res = await fetch("/api/photos/" + encodeURIComponent(photoId) + "/feature", { method: "PUT" });
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    allPhotos[idx].featured = data.featured;
+    render();
+    showToast(data.featured ? "已设为精选" : "已取消精选");
+  } catch { showToast("操作失败"); }
 }
 
 async function deletePhoto(id) {
@@ -283,19 +300,30 @@ function renderFeaturedModal() {
   `;
   document.body.appendChild(overlay);
 
-  // Click to toggle featured selection (local only, no server fetch)
-  overlay.querySelectorAll('.featured-pick-item').forEach(el => {
-    el.addEventListener('click', () => {
-      const id = el.dataset.id;
-      const idx = featuredIds.indexOf(id);
-      if (idx !== -1) {
-        featuredIds.splice(idx, 1);
-      } else {
-        featuredIds.push(id);
-      }
-      // Re-render modal with local state only
-      renderFeaturedModal();
-    });
+  // Event delegation on grid — direct DOM mutation, no full re-render
+  const grid = overlay.querySelector('.featured-pick-grid');
+  const previewList = overlay.querySelector('#featuredPreviewList');
+  grid.addEventListener('click', (e) => {
+    const item = e.target.closest('.featured-pick-item');
+    if (!item) return;
+    const id = item.dataset.id;
+    const idx = featuredIds.indexOf(id);
+    if (idx !== -1) {
+      featuredIds.splice(idx, 1);
+      item.classList.remove('featured-selected');
+      item.querySelector('.featured-pick-order').textContent = '+';
+    } else {
+      featuredIds.push(id);
+      item.classList.add('featured-selected');
+      item.querySelector('.featured-pick-order').textContent = featuredIds.length;
+    }
+    // Update preview list without re-rendering entire modal
+    previewList.innerHTML = featuredIds.length
+      ? featuredIds.map((fid, fi) => {
+          const p = allPhotos.find(x => x.id === fid);
+          return p ? '<span class="featured-chip">' + (fi + 1) + '. ' + (p.year || '照片 ' + (fi + 1)) + '</span>' : '';
+        }).join('')
+      : '<span class="featured-chip-placeholder">尚未选择照片</span>';
   });
 
   document.getElementById('featuredSaveBtn').addEventListener('click', async () => {
@@ -318,7 +346,7 @@ function openLightbox(index) {
   const info = document.getElementById('lightboxInfo');
   const p = allPhotos[index];
   if (!p) return;
-  img.src = p.secure_url;
+  img.src = optimizedUrl(p.secure_url, 1200);
   info.textContent = `${index + 1} / ${allPhotos.length}`;
   lb.classList.add('open');
   document.body.style.overflow = 'hidden';

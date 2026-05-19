@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f0f1a">
   <title>我的图库</title>
   <link rel="stylesheet" href="/css/style.css">
 </head>
@@ -23,9 +24,13 @@
   <main class="main-content">
     <!-- 3D Carousel Section -->
     <section class="carousel-3d-section" id="carouselSection">
-      <h2>✨ 精选照片</h2>
+      <h2>精选照片</h2>
       <div class="carousel-3d" id="carousel3d" style="display:none">
-        <div class="carousel-3d-stage" id="carouselStage"></div>
+        <div class="carousel-3d-stage" id="carouselStage">
+          <div class="carousel-3d-card skeleton" style="opacity:0.3"></div>
+          <div class="carousel-3d-card skeleton" style="opacity:0.2;transform:rotateY(72deg) translateZ(300px)"></div>
+          <div class="carousel-3d-card skeleton" style="opacity:0.15;transform:rotateY(144deg) translateZ(300px)"></div>
+        </div>
         <button class="carousel-3d-btn prev" id="carouselPrev">‹</button>
         <button class="carousel-3d-btn next" id="carouselNext">›</button>
       </div>
@@ -40,7 +45,12 @@
     <!-- Year Timeline Section -->
     <section class="year-section" id="yearSection" style="display:none">
       <div class="year-timeline" id="yearTimeline"></div>
-      <div class="year-photo-grid" id="yearPhotoGrid"></div>
+      <div class="year-photo-grid" id="yearPhotoGrid">
+        <div class="year-photo-item skeleton"></div>
+        <div class="year-photo-item skeleton"></div>
+        <div class="year-photo-item skeleton"></div>
+        <div class="year-photo-item skeleton"></div>
+      </div>
     </section>
   </main>
 

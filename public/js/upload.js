@@ -2,6 +2,10 @@
 let selectedFiles = [];
 let availableYears = [];
 
+function optimizedUrl(url, w) {
+  return url.replace("/upload/", "/upload/w_" + w + ",q_auto,f_auto/");
+}
+
 const area = document.getElementById('uploadArea');
 const input = document.getElementById('fileInput');
 const preview = document.getElementById('uploadPreview');
@@ -119,17 +123,27 @@ async function startUpload() {
   progress.style.display = 'block';
 
   let done = 0;
-  for (const file of selectedFiles) {
-    try {
-      const cloudData = await uploadToCloudinary(file);
-      await tagOnBackend(cloudData, year);
-    } catch (e) {
-      showToast(`${file.name} 上传失败: ${e.message}`);
+  const total = selectedFiles.length;
+  const concurrency = Math.min(3, total);
+  const queue = [...selectedFiles];
+
+  async function worker() {
+    while (queue.length > 0) {
+      const file = queue.shift();
+      try {
+        const cloudData = await uploadToCloudinary(file);
+        await tagOnBackend(cloudData, year);
+      } catch (e) {
+        showToast(`${file.name} 上传失败: ${e.message}`);
+      }
+      done++;
+      bar.style.width = Math.round((done / total) * 100) + '%';
+      status.textContent = `已上传 ${done}/${total}`;
     }
-    done++;
-    bar.style.width = Math.round((done / selectedFiles.length) * 100) + '%';
-    status.textContent = `已上传 ${done}/${selectedFiles.length}`;
   }
+
+  const workers = Array.from({ length: concurrency }, () => worker());
+  await Promise.all(workers);
 
   progress.style.display = 'none';
   btn.disabled = false;
