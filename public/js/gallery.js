@@ -1,41 +1,36 @@
 // ===== Gallery (Homepage) with 3D Cylinder Carousel + Year Timeline =====
 let photos = [];
-let allPhotos = []; // for year timeline
+let allPhotos = [];
 let currentIndex = 0;
 let currentAngle = 0;
 let autoRollTimer = null;
+let isHovering = false;
 let isDragging = false;
 let dragStartX = 0;
 let dragStartAngle = 0;
-let isHovering = false;
+let dragMoved = false;
 
 const MAX_PHOTOS = 10;
-const AUTO_ROLL_INTERVAL = 3500; // ms
-const STAGE_SELECTOR = '#carouselStage';
-const CAROUSEL_SELECTOR = '#carousel3d';
+const AUTO_ROLL_INTERVAL = 4000;
 
 // ===================== 3D Carousel =====================
 
 async function loadGallery() {
   try {
     const res = await fetch('/api/photos?featured=true');
-    let all = await res.json();
+    const all = await res.json();
     photos = all.slice(0, MAX_PHOTOS);
   } catch { photos = []; }
   renderCarousel();
-  startAutoRoll();
-  loadYears();
+  if (photos.length > 1) startAutoRoll();
 }
 
 function renderCarousel() {
-  const stage = document.querySelector(STAGE_SELECTOR);
+  const stage = document.getElementById('carouselStage');
   const wrap = document.querySelector('.carousel-3d-wrap');
   const empty = document.getElementById('emptyState');
-  const carousel = document.querySelector(CAROUSEL_SELECTOR);
-
+  const carousel = document.getElementById('carousel3d');
   if (!stage) return;
-
-  // Clear existing cards
   stage.querySelectorAll('.carousel-3d-card').forEach(el => el.remove());
 
   if (photos.length === 0) {
@@ -44,20 +39,24 @@ function renderCarousel() {
     return;
   }
   empty.style.display = 'none';
-  carousel.style.display = 'flex';
+  carousel.style.display = 'block';
   currentAngle = 0;
 
   const count = photos.length;
-  const angle = 360 / count;
-  const cardWidth = window.innerWidth <= 480 ? 140 : window.innerWidth <= 768 ? 180 : 240;
-  // Compute radius so cards don't overlap: r = w / (2 * sin(π/n))
-  const rad = Math.max(220, cardWidth / (2 * Math.sin(Math.PI / count)));
+  const angleStep = 360 / count;
+  const isMobile = window.innerWidth <= 768;
+  const cardSize = isMobile ? 160 : 220;
+  // radius ensures no overlap: r = (cardSize/2) / tan(π/n) + small gap
+  const radius = Math.max(280, (cardSize / 2) / Math.tan(Math.PI / count) + 60);
+
+  // Set stage card size for centering
+  stage.style.setProperty('--card-size', cardSize + 'px');
 
   photos.forEach((photo, i) => {
     const card = document.createElement('div');
     card.className = 'carousel-3d-card';
-    const tilt = i * angle;
-    card.style.transform = `rotateY(${tilt}deg) translateZ(${rad}px)`;
+    const tilt = i * angleStep;
+    card.style.transform = `rotateY(${tilt}deg) translateZ(${radius}px)`;
     card.dataset.index = i;
     const img = document.createElement('img');
     img.src = photo.secure_url;
@@ -69,18 +68,16 @@ function renderCarousel() {
   });
 
   stage.style.transform = `rotateY(0deg)`;
-  stage.dataset.angle = angle;
-  stage.dataset.radius = rad;
+  stage.dataset.angle = angleStep;
   stage.dataset.count = count;
+  stage.dataset.radius = radius;
 }
 
-// Auto-rotation
 function startAutoRoll() {
   stopAutoRoll();
-  if (photos.length <= 1) return;
   autoRollTimer = setInterval(() => {
     if (isHovering || isDragging) return;
-    const stage = document.querySelector(STAGE_SELECTOR);
+    const stage = document.getElementById('carouselStage');
     if (!stage) return;
     const angle = parseFloat(stage.dataset.angle) || (360 / photos.length);
     currentAngle += angle;
@@ -89,103 +86,69 @@ function startAutoRoll() {
 }
 
 function stopAutoRoll() {
-  if (autoRollTimer) {
-    clearInterval(autoRollTimer);
-    autoRollTimer = null;
-  }
+  if (autoRollTimer) { clearInterval(autoRollTimer); autoRollTimer = null; }
 }
 
-// Hover pause
+// Hover / touch pause
 document.addEventListener('DOMContentLoaded', () => {
-  const carousel = document.querySelector(CAROUSEL_SELECTOR);
+  const carousel = document.getElementById('carousel3d');
   if (!carousel) return;
   carousel.addEventListener('mouseenter', () => { isHovering = true; });
   carousel.addEventListener('mouseleave', () => { isHovering = false; });
-  carousel.addEventListener('touchstart', () => { isHovering = true; });
+  carousel.addEventListener('touchstart', () => { isHovering = true; }, { passive: true });
   carousel.addEventListener('touchend', () => { isHovering = false; });
 });
 
-// Prev / Next buttons
+// Prev / Next
 document.addEventListener('DOMContentLoaded', () => {
-  const prevBtn = document.getElementById('carouselPrev');
-  const nextBtn = document.getElementById('carouselNext');
-  if (prevBtn) {
-    prevBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      navigateCarousel(-1);
-    });
-  }
-  if (nextBtn) {
-    nextBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      navigateCarousel(1);
-    });
-  }
+  const prev = document.getElementById('carouselPrev');
+  const next = document.getElementById('carouselNext');
+  if (prev) prev.addEventListener('click', (e) => { e.stopPropagation(); navigateCarousel(-1); });
+  if (next) next.addEventListener('click', (e) => { e.stopPropagation(); navigateCarousel(1); });
 });
 
 function navigateCarousel(dir) {
-  const stage = document.querySelector(STAGE_SELECTOR);
+  const stage = document.getElementById('carouselStage');
   if (!stage) return;
-  const angle = parseFloat(stage.dataset.angle) || (360 / (parseInt(stage.dataset.count) || photos.length));
-  currentAngle += angle * dir;
+  const a = parseFloat(stage.dataset.angle) || 36;
+  currentAngle += a * dir;
   stage.style.transform = `rotateY(${-currentAngle}deg)`;
-  // Reset auto-roll timer so it doesn't jump immediately after manual nav
   stopAutoRoll();
-  startAutoRoll();
+  if (photos.length > 1) startAutoRoll();
 }
 
-// Drag rotation
+// Drag
 (function() {
-  let stage = null;
-  let isDown = false;
-  let startX = 0;
-  let startAngle = 0;
-  let hasMoved = false;
-
+  let stage = null, isDown = false, startX = 0, startAngle = 0, moved = false;
   document.addEventListener('DOMContentLoaded', () => {
-    stage = document.querySelector(STAGE_SELECTOR);
-    if (!stage) return;
-    const carousel = document.querySelector(CAROUSEL_SELECTOR);
-    if (!carousel) return;
+    stage = document.getElementById('carouselStage');
+    const carousel = document.getElementById('carousel3d');
+    if (!stage || !carousel) return;
 
     carousel.addEventListener('mousedown', (e) => {
       if (e.target.closest('.carousel-3d-nav')) return;
-      isDown = true;
-      hasMoved = false;
-      startX = e.pageX;
-      startAngle = currentAngle;
+      isDown = true; moved = false;
+      startX = e.pageX; startAngle = currentAngle;
       isDragging = true;
       stage.style.transition = 'none';
     });
-
     window.addEventListener('mousemove', (e) => {
       if (!isDown) return;
       const dx = e.pageX - startX;
-      if (Math.abs(dx) > 5) hasMoved = true;
-      const container = carousel;
-      const w = container.offsetWidth || 900;
-      const deltaAngle = (dx / w) * 360;
-      currentAngle = startAngle + deltaAngle;
+      if (Math.abs(dx) > 5) moved = true;
+      const w = carousel.offsetWidth || 900;
+      currentAngle = startAngle + (dx / w) * 360;
       stage.style.transform = `rotateY(${-currentAngle}deg)`;
     });
-
     window.addEventListener('mouseup', () => {
       if (!isDown) return;
-      isDown = false;
-      isDragging = false;
-      if (!stage) return;
-      stage.style.transition = 'transform 0.4s ease';
-      // Snap to nearest card
-      const angle = parseFloat(stage.dataset.angle) || (360 / (parseInt(stage.dataset.count) || photos.length));
-      if (hasMoved) {
-        // Snap: round to nearest angle increment
-        const snapped = Math.round(currentAngle / angle) * angle;
-        currentAngle = snapped;
-        stage.style.transform = `rotateY(${-currentAngle}deg)`;
-      }
-      // Resume auto-roll
+      isDown = false; isDragging = false; dragMoved = moved;
+      stage.style.transition = 'transform 0.5s ease';
+      const a = parseFloat(stage.dataset.angle) || 36;
+      currentAngle = Math.round(currentAngle / a) * a;
+      stage.style.transform = `rotateY(${-currentAngle}deg)`;
       stopAutoRoll();
-      startAutoRoll();
+      if (photos.length > 1) startAutoRoll();
     });
   });
 })();
@@ -194,37 +157,30 @@ function navigateCarousel(dir) {
 
 let selectedYear = null;
 let yearPhotos = [];
+let yearsList = [];
 
 async function loadYears() {
+  const section = document.getElementById('yearSection');
+  const timeline = document.getElementById('yearTimeline');
+
+  // Fetch year tags from backend
+  try {
+    const res = await fetch('/api/years');
+    yearsList = await res.json();
+  } catch { yearsList = []; }
+
+  // Also fetch all photos for year grid content
   try {
     const res = await fetch('/api/photos');
     allPhotos = await res.json();
   } catch { allPhotos = []; }
 
-  const section = document.getElementById('yearSection');
-  if (allPhotos.length === 0) {
-    if (section) section.style.display = 'none';
-    return;
-  }
-
-  // Extract unique years
-  const years = new Set();
-  allPhotos.forEach(p => {
-    if (p.created_at) {
-      const y = new Date(p.created_at).getFullYear();
-      if (!isNaN(y)) years.add(y);
-    }
-  });
-
-  const sortedYears = Array.from(years).sort((a, b) => b - a); // descending
-  if (sortedYears.length === 0) {
+  if (yearsList.length === 0 && allPhotos.length === 0) {
     if (section) section.style.display = 'none';
     return;
   }
 
   if (section) section.style.display = 'block';
-
-  const timeline = document.getElementById('yearTimeline');
   if (!timeline) return;
   timeline.innerHTML = '';
 
@@ -235,7 +191,7 @@ async function loadYears() {
   allBtn.addEventListener('click', () => selectYear(null, allBtn));
   timeline.appendChild(allBtn);
 
-  sortedYears.forEach(year => {
+  yearsList.forEach(year => {
     const btn = document.createElement('button');
     btn.className = 'year-marker';
     btn.textContent = year;
@@ -244,27 +200,25 @@ async function loadYears() {
     timeline.appendChild(btn);
   });
 
-  // Default: no year selected (show "all" as active, show all photos)
   selectYear(null, allBtn);
 }
 
-function selectYear(year, btn) {
+async function selectYear(year, btn) {
   selectedYear = year;
-  // Update active state
   document.querySelectorAll('.year-marker').forEach(m => m.classList.remove('active'));
   if (btn) btn.classList.add('active');
 
-  // Filter photos
   if (year === null) {
-    yearPhotos = [...allPhotos];
-  } else {
-    yearPhotos = allPhotos.filter(p => {
-      if (!p.created_at) return false;
-      const y = new Date(p.created_at).getFullYear();
-      return y === year;
-    });
+    yearPhotos = allPhotos;
+    renderYearPhotos();
+    return;
   }
 
+  // Fetch photos filtered by year tag
+  try {
+    const res = await fetch('/api/photos?year=' + year);
+    yearPhotos = await res.json();
+  } catch { yearPhotos = []; }
   renderYearPhotos();
 }
 
@@ -272,13 +226,10 @@ function renderYearPhotos() {
   const grid = document.getElementById('yearPhotoGrid');
   if (!grid) return;
   grid.innerHTML = '';
-
   if (yearPhotos.length === 0) {
-    // Because we only show years that have photos, this shouldn't normally happen
     grid.innerHTML = '<div class="empty-state"><h3>暂无照片</h3></div>';
     return;
   }
-
   yearPhotos.forEach((photo, i) => {
     const div = document.createElement('div');
     div.className = 'year-photo-item';
@@ -287,29 +238,22 @@ function renderYearPhotos() {
     img.alt = 'photo';
     img.loading = 'lazy';
     div.appendChild(img);
-    div.addEventListener('click', () => {
-      // Open lightbox with yearPhotos context
-      currentIndex = i;
-      openYearLightbox(i);
-    });
+    div.addEventListener('click', () => { currentIndex = i; openYearLightbox(i); });
     grid.appendChild(div);
   });
 }
 
-// ===================== Lightbox (shared between carousel and year grid) =====================
+// ===================== Lightbox =====================
 let lightboxPhotos = [];
-let lightboxMode = 'carousel'; // 'carousel' or 'year'
 
 function openLightbox(index) {
   lightboxPhotos = photos;
-  lightboxMode = 'carousel';
   currentIndex = index;
   showLightbox();
 }
 
 function openYearLightbox(index) {
   lightboxPhotos = yearPhotos;
-  lightboxMode = 'year';
   currentIndex = index;
   showLightbox();
 }
@@ -319,7 +263,7 @@ function showLightbox() {
   const img = document.getElementById('lightboxImg');
   const info = document.getElementById('lightboxInfo');
   const photo = lightboxPhotos[currentIndex];
-  if (!photo) return;
+  if (!photo) { closeLightbox(); return; }
   img.src = photo.secure_url;
   img.alt = 'photo';
   info.textContent = `${currentIndex + 1} / ${lightboxPhotos.length}`;
@@ -335,16 +279,12 @@ function closeLightbox() {
 }
 
 function navigateLightbox(dir) {
-  currentIndex += dir;
-  if (currentIndex < 0) currentIndex = lightboxPhotos.length - 1;
-  if (currentIndex >= lightboxPhotos.length) currentIndex = 0;
-  const img = document.getElementById('lightboxImg');
-  const info = document.getElementById('lightboxInfo');
+  currentIndex = (currentIndex + dir + lightboxPhotos.length) % lightboxPhotos.length;
   const photo = lightboxPhotos[currentIndex];
   if (!photo) return;
-  img.src = photo.secure_url;
-  img.alt = 'photo';
-  info.textContent = `${currentIndex + 1} / ${lightboxPhotos.length}`;
+  document.getElementById('lightboxImg').src = photo.secure_url;
+  document.getElementById('lightboxImg').alt = 'photo';
+  document.getElementById('lightboxInfo').textContent = `${currentIndex + 1} / ${lightboxPhotos.length}`;
 }
 
 function lightboxKeyHandler(e) {
@@ -353,13 +293,5 @@ function lightboxKeyHandler(e) {
   if (e.key === 'ArrowRight') navigateLightbox(1);
 }
 
-// ===================== Toast =====================
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  clearTimeout(t._hide);
-  t._hide = setTimeout(() => t.classList.remove('show'), 2500);
-}
-
+// ===================== Init =====================
 loadGallery();

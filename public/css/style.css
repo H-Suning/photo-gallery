@@ -55,50 +55,48 @@ body {
 /* ===== 3D Cylinder Carousel ===== */
 .carousel-3d-wrap {
   position: relative;
-  padding: 40px 24px;
-  min-height: 380px;
+  padding: 30px 24px 10px;
+  min-height: 400px;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 .carousel-3d {
   position: relative;
   width: 100%;
-  max-width: 900px;
-  height: 340px;
-  perspective: 1200px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  max-width: 800px;
+  height: 380px;
+  perspective: 1500px;
   margin: 0 auto;
   user-select: none;
 }
 .carousel-3d-stage {
-  width: 280px;
-  height: 280px;
-  position: relative;
+  width: 0;
+  height: 0;
+  position: absolute;
+  left: 50%;
+  top: 50%;
   transform-style: preserve-3d;
-  transition: transform 0.4s ease;
+  transition: transform 0.5s ease;
   will-change: transform;
 }
 .carousel-3d-card {
   position: absolute;
-  width: 240px;
-  height: 240px;
-  left: 50%;
-  top: 50%;
-  margin-left: -120px;
-  margin-top: -120px;
+  width: var(--card-size, 220px);
+  height: var(--card-size, 220px);
+  left: calc(var(--card-size, 220px) * -0.5);
+  top: calc(var(--card-size, 220px) * -0.5);
   border-radius: 16px;
   overflow: hidden;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.25);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   transition: box-shadow 0.3s;
 }
 .carousel-3d-card:hover {
-  box-shadow: 0 8px 32px rgba(37,99,235,0.3);
+  box-shadow: 0 8px 40px rgba(37,99,235,0.35);
 }
 .carousel-3d-card img {
   width: 100%;
@@ -122,13 +120,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   transition: all 0.2s;
   z-index: 10;
 }
 .carousel-3d-nav:hover {
   background: #fff;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  transform: translateY(-50%) scale(1.1);
 }
 .carousel-3d-nav.prev { left: 10px; }
 .carousel-3d-nav.next { right: 10px; }
@@ -206,12 +205,62 @@ body {
   display: block;
 }
 
+.year-photo-grid .empty-state { grid-column: 1 / -1; }
+
+/* ===== Year Picker Modal ===== */
+.year-picker-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.year-option {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1.5px solid #cbd5e1;
+  background: #fff;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.year-option:hover { border-color: #60a5fa; color: #2563eb; background: #eff6ff; }
+.year-option.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+.year-picker-custom {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+}
+.year-picker-custom input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+}
+.year-picker-custom input:focus { border-color: #2563eb; }
+
+/* Photo year badge */
+.photo-year-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 8px;
+  z-index: 2;
+}
+
 /* Max 3 columns on desktop */
 @media (min-width: 1200px) {
   .year-photo-grid { grid-template-columns: repeat(3, 1fr); }
 }
-
-/* ===== Old gallery styles (removed — now using 3D carousel) ===== */
 /* Kept for reference:
    .gallery-wrap, .gallery-scroll, .gallery-card — all replaced by 3D carousel.
 */
@@ -275,6 +324,24 @@ body {
 
 .upload-preview { margin-top: 24px; }
 .upload-preview h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #0f172a; }
+.upload-year-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: #475569;
+}
+.upload-year-row select {
+  padding: 6px 12px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 14px;
+  background: #fff;
+  outline: none;
+  cursor: pointer;
+}
+.upload-year-row select:focus { border-color: #2563eb; }
 .preview-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
@@ -365,6 +432,8 @@ body {
 .btn-cover { background: rgba(255,255,255,0.9); color: #94a3b8; }
 .btn-cover.active { color: #10b981; }
 .btn-cover:hover { background: #fff; }
+.btn-year { background: rgba(255,255,255,0.9); color: #94a3b8; font-size: 14px; line-height: 1; padding: 0; }
+.btn-year:hover { background: #fff; color: #2563eb; }
 .btn-del { background: rgba(239,68,68,0.9); color: #fff; }
 .btn-del:hover { background: #ef4444; }
 
@@ -487,13 +556,8 @@ body {
   .page-header { padding: 20px 20px 0; }
   .page-header h1 { font-size: 22px; }
 
-  .carousel-3d-wrap { padding: 24px 16px; min-height: 300px; }
-  .carousel-3d { height: 260px; }
-  .carousel-3d-stage { width: 200px; height: 200px; }
-  .carousel-3d-card { width: 180px; height: 180px; margin-left: -90px; margin-top: -90px; }
-  .carousel-3d-nav { width: 36px; height: 36px; font-size: 18px; }
-  .carousel-3d-nav.prev { left: 4px; }
-  .carousel-3d-nav.next { right: 4px; }
+  .carousel-3d-wrap { padding: 24px 12px 0; min-height: 320px; }
+  .carousel-3d { height: 300px; }
 
   .year-section { padding: 0 16px 32px; }
   .year-photo-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }

@@ -31,6 +31,54 @@ area.addEventListener('drop', (e) => {
   handleFiles(e.dataTransfer.files);
 });
 
+// Load available years for the dropdown
+let availableYears = [];
+fetch('/api/years').then(r => r.json()).then(years => {
+  availableYears = years;
+  populateYearSelect();
+}).catch(() => {});
+
+function populateYearSelect() {
+  const sel = document.getElementById('yearSelect');
+  if (!sel) return;
+  // Keep existing custom options
+  const currentVal = sel.value;
+  sel.innerHTML = '<option value="">不选择年份</option>';
+  availableYears.forEach(y => {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y;
+    sel.appendChild(opt);
+  });
+  // Custom option
+  const customOpt = document.createElement('option');
+  customOpt.value = '__custom__';
+  customOpt.textContent = '自定义年份...';
+  sel.appendChild(customOpt);
+  sel.value = currentVal;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const sel = document.getElementById('yearSelect');
+  if (sel) {
+    sel.addEventListener('change', () => {
+      if (sel.value === '__custom__') {
+        const custom = prompt('输入年份（例如 2020）');
+        if (custom && /^\d{4}$/.test(custom)) {
+          if (!availableYears.includes(custom)) {
+            availableYears.push(custom);
+            availableYears.sort((a, b) => parseInt(b) - parseInt(a));
+            populateYearSelect();
+          }
+          sel.value = custom;
+        } else {
+          sel.value = '';
+        }
+      }
+    });
+  }
+});
+
 function handleFiles(files) {
   const newFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
   if (newFiles.length === 0) return showToast('请选择图片文件');
@@ -76,18 +124,20 @@ async function uploadToCloudinary(file) {
   return res.json();
 }
 
-async function tagOnBackend(data) {
+async function tagOnBackend(data, year) {
+  const payload = {
+    public_id: data.public_id,
+    secure_url: data.secure_url,
+    format: data.format,
+    bytes: data.bytes,
+    width: data.width,
+    height: data.height,
+  };
+  if (year) payload.year = year;
   const res = await fetch('/api/upload', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      public_id: data.public_id,
-      secure_url: data.secure_url,
-      format: data.format,
-      bytes: data.bytes,
-      width: data.width,
-      height: data.height,
-    }),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error('Backend tag failed');
   return res.json();
@@ -95,6 +145,8 @@ async function tagOnBackend(data) {
 
 async function startUpload() {
   if (selectedFiles.length === 0) return showToast('请先选择照片');
+  const yearSel = document.getElementById('yearSelect');
+  const selectedYear = yearSel ? yearSel.value : '';
   btn.disabled = true;
   btn.textContent = '上传中...';
   const progress = document.getElementById('uploadProgress');
@@ -108,7 +160,7 @@ async function startUpload() {
   for (const file of selectedFiles) {
     try {
       const cloudData = await uploadToCloudinary(file);
-      await tagOnBackend(cloudData);
+      await tagOnBackend(cloudData, selectedYear);
     } catch (e) {
       showToast(`${file.name} 上传失败: ${e.message}`);
     }

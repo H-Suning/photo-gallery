@@ -8,7 +8,8 @@ const archiver = require('archiver');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const TAG_FEATURED = 'gallery-featured';
-const FOLDER = 'photo-gallery';
+const TAG_COVER = 'gallery-cover';
+const TAG_YEAR_PREFIX = 'year-';
 const runningOnCFWorker = typeof process !== 'undefined' && process.env && process.env.CF_WORKER;
 
 // Lazy Cloudinary init — avoids Railway build-time secret resolution
@@ -30,18 +31,16 @@ function ensureCloudinary() {
 app.use(express.json({ limit: '50mb' }));
 app.use((req, res, next) => { ensureCloudinary(); next(); });
 
-// In production (Cloudflare Workers), static files are served at the edge by wrangler assets.
-// On local Node.js, serve from the public/ directory.
 if (!runningOnCFWorker) {
   app.use(express.static('public', { extensions: ['html'] }));
 } else {
-  // On Workers, express.static might not be available; register explicit routes
   app.get('/upload', (req, res) => res.redirect('/upload.html'));
   app.get('/manage', (req, res) => res.redirect('/manage.html'));
 }
 
-// --- Helper: Cloudinary resource → photo object ---
+// --- Helpers ---
 function toPhoto(r) {
+  const tags = r.tags || [];
   return {
     id: r.public_id,
     url: r.secure_url,
@@ -52,13 +51,13 @@ function toPhoto(r) {
     width: r.width,
     height: r.height,
     created_at: r.created_at,
-    featured: r.tags ? r.tags.includes(TAG_FEATURED) : false,
-    covered: r.tags ? r.tags.includes('gallery-cover') : false,
+    featured: tags.includes(TAG_FEATURED),
+    covered: tags.includes(TAG_COVER),
+    year: tags.find(t => t.startsWith(TAG_YEAR_PREFIX))?.replace(TAG_YEAR_PREFIX, '') || null,
     sortOrder: r.context && r.context.custom ? parseInt(r.context.custom.carousel_order) : null,
   };
 }
 
-// --- Helper: download image buffer ---
 function downloadImage(url) {
   return new Promise((resolve, reject) => {
     https.get(url, (res) => {
@@ -71,29 +70,29 @@ function downloadImage(url) {
   });
 }
 
-// ===================== Photo API =====================
+// ===================== Cloudinary API =====================
 
-// List photos (all or featured only)
+// List all photos (returns everything tagged)
 app.get('/api/photos', async (req, res) => {
   try {
+    const options = {
+      resource_type: 'image',
+      max_results: 500,
+      order: 'desc',
+      context: true,
+    };
+
+    // Filter by year tag
     let result;
-    if (req.query.featured === 'true') {
-      result = await cloudinary.api.resources_by_tag(TAG_FEATURED, {
-        resource_type: 'image',
-        max_results: 500,
-        order: 'desc',
-        context: true,
-      });
+    if (req.query.year) {
+      const yearTag = TAG_YEAR_PREFIX + req.query.year;
+      result = await cloudinary.api.resources_by_tag(yearTag, options);
     } else {
-      result = await cloudinary.api.resources_by_tag(TAG_FEATURED, {
-        resource_type: 'image',
-        max_results: 500,
-        order: 'desc',
-        context: true,
-      });
+      // List ALL photos by fetching multiple tag groups
+      result = await cloudinary.api.resources_by_tag(TAG_FEATURED, options);
     }
+
     const photos = (result.resources || []).map(toPhoto);
-    // Sort by carousel_order if available (unset items go last)
     photos.sort((a, b) => {
       if (a.sortOrder !== null && b.sortOrder !== null) return a.sortOrder - b.sortOrder;
       if (a.sortOrder !== null) return -1;
@@ -108,12 +107,29 @@ app.get('/api/photos', async (req, res) => {
   }
 });
 
-// Upload single (accepts data from direct browser-to-Cloudinary upload)
+// Get all year tags
+app.get('/api/years', async (req, res) => {
+  try {
+    const result = await cloudinary.api.tags({ max_results: 500 });
+    const yearTags = (result.tags || [])
+      .filter(t => t.startsWith(TAG_YEAR_PREFIX))
+      .map(t => t.replace(TAG_YEAR_PREFIX, ''))
+      .sort((a, b) => parseInt(b) - parseInt(a));
+    res.json(yearTags);
+  } catch (err) {
+    console.error('Years error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Upload single
 app.post('/api/upload', async (req, res) => {
-  const { public_id, secure_url, format, bytes, width, height } = req.body;
+  const { public_id, secure_url, format, bytes, width, height, year } = req.body;
   if (!public_id || !secure_url) return res.status(400).json({ error: 'Missing public_id or secure_url' });
   try {
-    await cloudinary.uploader.add_tag(TAG_FEATURED, [public_id]);
+    const tags = [TAG_FEATURED];
+    if (year) tags.push(TAG_YEAR_PREFIX + year);
+    await cloudinary.uploader.add_tag(tags.join(','), [public_id]);
   } catch (e) {
     console.warn('Tag failed:', e.message);
   }
@@ -125,16 +141,21 @@ app.post('/api/upload', async (req, res) => {
     width: width || 0,
     height: height || 0,
     created_at: new Date().toISOString(),
-    tags: [TAG_FEATURED],
+    tags: [TAG_FEATURED, year ? TAG_YEAR_PREFIX + year : null].filter(Boolean),
   }));
 });
 
-// Upload multiple (accepts array of Cloudinary resource data)
+// Upload multiple
 app.post('/api/upload-multiple', async (req, res) => {
   const files = req.body.files || req.body;
   if (!Array.isArray(files) || !files.length) return res.status(400).json({ error: 'No files' });
   const ids = files.map(f => f.public_id);
-  try { await cloudinary.api.add_tag(TAG_FEATURED, ids); } catch (e) { console.warn('Tag failed:', e.message); }
+  const commonYear = req.body.year || null;
+  try {
+    const tags = [TAG_FEATURED];
+    if (commonYear) tags.push(TAG_YEAR_PREFIX + commonYear);
+    await cloudinary.api.add_tag(tags, ids);
+  } catch (e) { console.warn('Tag failed:', e.message); }
   const photos = files.map(f => toPhoto({
     public_id: f.public_id,
     secure_url: f.secure_url,
@@ -143,7 +164,7 @@ app.post('/api/upload-multiple', async (req, res) => {
     width: f.width || 0,
     height: f.height || 0,
     created_at: new Date().toISOString(),
-    tags: [TAG_FEATURED],
+    tags: [TAG_FEATURED, commonYear ? TAG_YEAR_PREFIX + commonYear : null].filter(Boolean),
   }));
   res.json(photos);
 });
@@ -161,6 +182,7 @@ app.put('/api/photos/:id/feature', async (req, res) => {
     }
     res.json({ featured: !isFeatured });
   } catch (err) {
+    console.error('Feature toggle error:', err.message);
     res.status(500).json({ error: err?.message || 'Unknown error' });
   }
 });
@@ -180,14 +202,37 @@ app.put('/api/photos/:id/cover', async (req, res) => {
   try {
     const pubId = req.params.id;
     const r = await cloudinary.api.resource(pubId);
-    const isCover = r.tags && r.tags.includes('gallery-cover');
+    const isCover = r.tags && r.tags.includes(TAG_COVER);
     if (isCover) {
-      await cloudinary.api.remove_tag('gallery-cover', [pubId]);
+      await cloudinary.api.remove_tag(TAG_COVER, [pubId]);
     } else {
-      await cloudinary.api.add_tag('gallery-cover', [pubId]);
+      await cloudinary.api.add_tag(TAG_COVER, [pubId]);
     }
     res.json({ covered: !isCover });
   } catch (err) {
+    console.error('Cover toggle error:', err.message);
+    res.status(500).json({ error: err?.message || 'Unknown error' });
+  }
+});
+
+// Set year on a photo
+app.put('/api/photos/:id/year', async (req, res) => {
+  try {
+    const pubId = req.params.id;
+    const { year } = req.body;
+    if (!year) return res.status(400).json({ error: 'Missing year' });
+    const r = await cloudinary.api.resource(pubId);
+    const tags = r.tags || [];
+    // Remove old year tag
+    const oldYearTag = tags.find(t => t.startsWith(TAG_YEAR_PREFIX));
+    if (oldYearTag) {
+      await cloudinary.api.remove_tag(oldYearTag, [pubId]);
+    }
+    // Add new year tag
+    await cloudinary.api.add_tag(TAG_YEAR_PREFIX + year, [pubId]);
+    res.json({ year });
+  } catch (err) {
+    console.error('Year set error:', err.message);
     res.status(500).json({ error: err?.message || 'Unknown error' });
   }
 });
@@ -244,7 +289,7 @@ app.post('/api/download', async (req, res) => {
   }
 });
 
-// ===================== Share (stateless — IDs encoded in URL) =====================
+// ===================== Share =====================
 app.post('/api/shares', (req, res) => {
   const { photoIds } = req.body;
   if (!photoIds || !photoIds.length) return res.status(400).json({ error: 'No photos' });
@@ -263,11 +308,8 @@ app.get('/api/shares/:token', async (req, res) => {
   }
 });
 
-// Share page — redirect with token as query param so it works on both Node.js (sendFile) and CF Workers (static assets)
 app.get('/share/:token', (req, res) => {
   if (runningOnCFWorker) {
-    // On Cloudflare Workers, redirect to share.html with token in query string
-    // share.js will read it from the URL
     res.redirect('/share.html?token=' + encodeURIComponent(req.params.token));
   } else {
     res.sendFile(path.join(__dirname, 'public', 'share.html'));
@@ -278,7 +320,6 @@ app.get('/share/:token', (req, res) => {
 if (!runningOnCFWorker) {
   app.listen(PORT, () => {
     console.log(`Photo Gallery running at http://localhost:${PORT}`);
-    console.log('Build cache buster: 20260519');
   });
 }
 
