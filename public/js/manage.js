@@ -237,11 +237,18 @@ async function deleteSelected() {
 let featuredIds = [];
 
 async function manageFeatured() {
-  // Fetch current featured list
+  // Fetch current featured list from server (initial load)
   try {
     const res = await fetch('/api/featured');
     featuredIds = (await res.json()).map(p => p.id);
   } catch { featuredIds = []; }
+  renderFeaturedModal();
+}
+
+function renderFeaturedModal() {
+  // Remove existing modal if any
+  const existing = document.getElementById('featuredModal');
+  if (existing) existing.remove();
 
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay open';
@@ -276,7 +283,7 @@ async function manageFeatured() {
   `;
   document.body.appendChild(overlay);
 
-  // Click to toggle featured selection
+  // Click to toggle featured selection (local only, no server fetch)
   overlay.querySelectorAll('.featured-pick-item').forEach(el => {
     el.addEventListener('click', () => {
       const id = el.dataset.id;
@@ -286,9 +293,8 @@ async function manageFeatured() {
       } else {
         featuredIds.push(id);
       }
-      // Re-render the modal
-      overlay.remove();
-      manageFeatured();
+      // Re-render modal with local state only
+      renderFeaturedModal();
     });
   });
 
